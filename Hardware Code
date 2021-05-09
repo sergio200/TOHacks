@@ -1,0 +1,100 @@
+//include libraries to run servo and lcd
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
+//setup sensor and actuator pins
+Servo myServo;
+int thermo = A0;
+int hall =  A1;
+int tempset = A3;
+int sw = 10;
+
+//setup useful variables
+int temp;
+int door;
+int wintstat;
+int desirtemp;
+int newtemp;
+int angle;
+
+float R1 = 10000;
+float logR2, R2, T;
+float c1 = 1.009249522e-03, c2 = 2.378405444e-04, c3 = 2.019202697e-07;
+
+//create display
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup() {
+  // put your setup code here, to run once:
+  //setup servo
+  myServo.attach(3);
+  Serial.begin(9600);  
+  myServo.write(0);
+
+//setup lcd display
+  lcd.begin();
+  lcd.backlight();
+  lcd.clear();
+  lcd.println("Hello and Welcome!");
+  delay(500);
+  lcd.clear();
+  lcd.println("Setting up...");
+  delay(500);
+  lcd.clear();
+
+//setup switch
+  pinMode(sw, INPUT);
+   
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  //get sensor values
+  temp = analogRead(thermo);
+  door = analogRead(hall);
+  desirtemp = analogRead(tempset);
+  
+  //change potentiometer reading to degree equivalent
+  desirtemp = map(desirtemp, 0, 1023, 10, 30);
+
+  //switch used by the user to tell if iits winter or summer
+  wintstat =digitalRead(sw);  
+
+  //calculations to get the thermister temperature
+  R2 = R1 * (1023.0 / (float)temp - 1.0);
+  logR2 = log(R2);
+  T = (1.0 / (c1 + c2*logR2 + c3*logR2*logR2*logR2));
+  T = T - 273.15;
+
+//testing
+  Serial.println(T);
+  
+  if(door <450){//magnet is close so door is closed assumes people are gone
+    lcd.clear();
+    lcd.print("Temperature:");
+    lcd.println(T);
+    if (wintstat == 0){//winter temperature should be lowered when the people leave
+      if ((T-10)<10){ 
+        newtemp=10;
+      }else{
+        newtemp = T-10;
+      }
+    }else{//summer temperature should be increased when people leave room
+      if(T+10>30){
+        newtemp = 30;
+      }else{
+        newtemp = T+10;
+      }
+    }
+    //map angle to temp equivalent so thermostat changes to appropriate temp
+    angle=map(newtemp,10,30,0,150);
+    myServo.write(angle);
+    
+  }else{//door open we assume person came in
+    angle=map(desirtemp,10,30,0,150);
+    myServo.write(angle);
+    lcd.clear();
+    lcd.print("Temperature:");
+    lcd.println(desirtemp);
+  }
+}
